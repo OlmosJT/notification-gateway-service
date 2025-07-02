@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import uz.tengebank.notificationgatewayservice.dto.NotificationPayload;
+import uz.tengebank.notificationgatewayservice.dto.notification.NotificationPayload;
 import uz.tengebank.notificationgatewayservice.service.NotificationService;
 
 @RestController

@@ -6,7 +6,7 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import uz.tengebank.notificationgatewayservice.config.ApplicationProperties;
-import uz.tengebank.notificationgatewayservice.dto.NotificationPayload;
+import uz.tengebank.notificationgatewayservice.dto.notification.NotificationPayload;
 import uz.tengebank.notificationgatewayservice.repository.PushTokenRepository;
 
 import java.util.List;

@@ -1,4 +1,4 @@
-package uz.tengebank.notificationgatewayservice.dto;
+package uz.tengebank.notificationgatewayservice.dto.notification;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import jakarta.validation.Valid;
