@@ -11,7 +11,6 @@ import uz.tengebank.notificationgatewayservice.repository.PushTokenRepository;
 
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
