@@ -7,7 +7,8 @@ import uz.tengebank.notificationgatewayservice.exception.ErrorCodeGroup;
 
 @AllArgsConstructor
 public enum CommonErrorCode implements ErrorCode {
-  INTERNAL_SERVER_ERROR(1500, "INTERNAL_SERVER_ERROR", "An unexpected internal server error occurred.", HttpStatus.INTERNAL_SERVER_ERROR);
+  TEMPLATE_SERVICE_EXCEPTION(2000, "TEMPLATE_SERVICE_EXCEPTION", "Template not found.", HttpStatus.NOT_FOUND),
+  INTERNAL_SERVER_ERROR(1500, "INTERNAL_SERVER_ERROR", "An unexpected internal server error occurred.", HttpStatus.INTERNAL_SERVER_ERROR)
   ;
 
   private final int code;
