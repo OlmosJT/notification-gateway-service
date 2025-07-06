@@ -106,6 +106,10 @@ public record NotificationPayload(
 
   public record Recipient(
 
+      @NotNull(message = "recipient id cannot be null")
+      @Schema(description = "A unique UUID for tracking the singe recipient request in batch notification request.")
+      UUID id,
+
       @NotBlank(message = "phone cannot be blank")
       @Pattern(regexp = "\\d{12}", message = "Phone must be a 12-digit number (e.g., 998931234567)")
       @Schema(description = "Recipient's phone number in 12-digit international format.", example = "998930082417")

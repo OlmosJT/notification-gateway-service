@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import uz.tengebank.notificationcontracts.events.EventEnvelope;
 import uz.tengebank.notificationcontracts.events.EventFactory;
 import uz.tengebank.notificationcontracts.events.EventType;
+import uz.tengebank.notificationcontracts.payload.NotificationAttemptFailed;
 import uz.tengebank.notificationcontracts.payload.NotificationProcessingFailed;
 import uz.tengebank.notificationcontracts.payload.NotificationRequestAccepted;
 import uz.tengebank.notificationcontracts.payload.Payload;
@@ -93,5 +94,16 @@ public class EventPublisher {
     );
 
     publish(EventType.NOTIFICATION_PROCESSING_FAILED_V1, eventPayload);
+  }
+
+  public void publishNotificationAttemptFailedEvent(NotificationPayload payload, UUID recipientId, String channel, String reason, String details) {
+    var eventPayload = new NotificationAttemptFailed(
+        payload.requestId(),
+        recipientId,
+        channel,
+        reason,
+        details
+    );
+    publish(EventType.NOTIFICATION_ATTEMPT_FAILED_V1, eventPayload);
   }
 }

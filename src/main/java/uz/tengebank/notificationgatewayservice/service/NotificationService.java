@@ -16,6 +16,7 @@ import uz.tengebank.notificationgatewayservice.dto.template.batch.RenderResult;
 import uz.tengebank.notificationgatewayservice.exception.ApiException;
 import uz.tengebank.notificationgatewayservice.repository.PushTokenRepository;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -45,6 +46,7 @@ public class NotificationService {
       Map<String, RenderResult> resultMap = performBatchRendering(payload);
       if (resultMap == null) {
         log.error("Rendering templates failed.");
+        eventPublisher.publishRequestFailedEvent(payload, "RENDER_RESULT_NULL", "Batch render operation returned no data.");
         return;
       }
 
@@ -65,32 +67,48 @@ public class NotificationService {
 
     payload.recipients().forEach(recipient -> {
       if(payload.channels().contains(NotificationPayload.Channel.PUSH)) {
-        final String taskKey = recipient.phone() + KEY_SEPARATOR + NotificationPayload.Channel.PUSH.name();
+        final String taskKey = recipient.id() + KEY_SEPARATOR + NotificationPayload.Channel.PUSH.name();
         RenderResult pushResult = resultMap.get(taskKey);
 
-        if(!isRenderResultInvalid(pushResult, recipient)) {
-
-          var pushConfig = Optional.ofNullable(payload.channelConfig())
-              .map(NotificationPayload.ChannelConfig::push)
-              .orElse(null);
-
-          dispatchPushNotification(recipient, pushConfig, pushResult.data());
+        if(isRenderResultInvalid(pushResult, recipient)) {
+          eventPublisher.publishNotificationAttemptFailedEvent(
+              payload,
+              recipient.id(),
+              NotificationPayload.Channel.PUSH.name(),
+              pushResult != null ? pushResult.error().errorCode() : "RENDER_RESULT_FAILED",
+              pushResult != null ? pushResult.error().message() : "Unknown render result"
+          );
+          return;
         }
+
+        var pushConfig = Optional.ofNullable(payload.channelConfig())
+            .map(NotificationPayload.ChannelConfig::push)
+            .orElse(null);
+
+        dispatchPushNotification(recipient, pushConfig, pushResult.data());
       }
 
       if(payload.channels().contains(NotificationPayload.Channel.SMS)) {
-        final String taskKey = recipient.phone() + KEY_SEPARATOR + NotificationPayload.Channel.SMS.name();
+        final String taskKey = recipient.id() + KEY_SEPARATOR + NotificationPayload.Channel.SMS.name();
         RenderResult smsResult = resultMap.get(taskKey);
 
-        if (!isRenderResultInvalid(smsResult, recipient)) {
-          var smsConfig = Optional.ofNullable(payload.channelConfig())
-              .map(NotificationPayload.ChannelConfig::sms)
-              .orElse(null);
-
-          dispatchSmsNotification(recipient, smsConfig, smsResult.data().body());
+        if (isRenderResultInvalid(smsResult, recipient)) {
+          eventPublisher.publishNotificationAttemptFailedEvent(
+              payload,
+              recipient.id(),
+              NotificationPayload.Channel.PUSH.name(),
+              smsResult != null ? smsResult.error().errorCode() : "RENDER_RESULT_FAILED",
+              smsResult != null ? smsResult.error().message() : "Unknown render result"
+          );
+          return;
         }
-      }
 
+        var smsConfig = Optional.ofNullable(payload.channelConfig())
+            .map(NotificationPayload.ChannelConfig::sms)
+            .orElse(null);
+
+        dispatchSmsNotification(recipient, smsConfig, smsResult.data().body());
+      }
     });
 
   }
@@ -101,11 +119,18 @@ public class NotificationService {
     for (var recipient : payload.recipients()) {
       boolean dispatched = false;
       for (var channel : payload.channels()) {
-        final String taskKey = recipient.phone() + KEY_SEPARATOR + channel.name();
+        final String taskKey = recipient.id() + KEY_SEPARATOR + channel.name();
         RenderResult result = resultMap.get(taskKey);
 
         if (isRenderResultInvalid(result, recipient)) {
           log.warn("Render failed for recipient {} on channel {}, trying next fallback channel.", recipient.phone(), channel);
+          eventPublisher.publishNotificationAttemptFailedEvent(
+              payload,
+              recipient.id(),
+              channel.name(),
+              result != null ? result.error().errorCode() : "RENDER_RESULT_FAILED",
+              result != null ? result.error().message() : "Unknown render result"
+          );
           continue; // Move to the next channel.
         }
 
@@ -129,13 +154,19 @@ public class NotificationService {
         if (dispatchSuccess) {
           log.info("Dispatched to {} via fallback channel {}", recipient.phone(), channel);
           dispatched = true;
-          break; // Success! Stop trying other channels for this recipient.
+          break;
         }
       }
 
       if (!dispatched) {
         log.error("All fallback channels failed for recipient {}", recipient.phone());
-        // TODO: emit info
+        eventPublisher.publishNotificationAttemptFailedEvent(
+            payload,
+            recipient.id(),
+            Arrays.toString(NotificationPayload.Channel.values()),
+            "ALL_CHANNELS_FAILED",
+            "Notification could not be dispatched for recipient [" + recipient.id() + "]: " + recipient.phone()
+        );
       }
     }
   }
@@ -146,7 +177,6 @@ public class NotificationService {
     if (templateResponse.status() == ApiResponse.Status.ERROR) {
       throw new ApiException(CommonErrorCode.TEMPLATE_SERVICE_EXCEPTION, templateResponse.error().message());
     }
-
     log.info("Template '{}' validated successfully.", templateName);
   }
 
@@ -154,7 +184,7 @@ public class NotificationService {
     var renderTasks = payload.recipients().stream()
         .flatMap(r -> payload.channels().stream().map(c ->
             new BatchRenderRequest.RenderTask(
-                r.phone() + KEY_SEPARATOR + c.name(),
+                r.id() + KEY_SEPARATOR + c.name(),
                 r.lang(),
                 TemplateType.valueOf(c.name()),
                 r.variables()
@@ -178,10 +208,10 @@ public class NotificationService {
       Map<String, Object> pushConfig,
       RenderResult.RenderedTemplate renderedTemplate
   ) {
+    // todo: pass as parameter
     List<String> tokens = pushTokenRepository.findTokensByPhone(recipient.phone());
     if (tokens.isEmpty()) {
-      log.warn("No push tokens found for phone {}. Push attempt failed.", recipient.phone());
-      // emitAuditEvent("PUSH_SKIPPED_NO_TOKEN", recipient, null);
+      log.error("No push tokens found for phone {}. Push attempt failed.", recipient.phone());
       return false;
     }
     // TODO: Implement Push Data retrieval from template/variables
@@ -202,7 +232,6 @@ public class NotificationService {
     if (result == null || !result.success()) {
       log.error("Skipping recipient {}: Rendering failed. Reason: {}",
           recipient.phone(), result != null ? result.error() : "Unknown render result");
-      // emitAuditEvent("RENDER_FAILED", recipient, result != null ? result.error().toString() : "Unknown render error");
       return true;
     }
     return false;
