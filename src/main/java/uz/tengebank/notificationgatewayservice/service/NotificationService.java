@@ -18,6 +18,7 @@ import uz.tengebank.notificationgatewayservice.repository.PushTokenRepository;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -30,6 +31,8 @@ public class NotificationService {
   private final TemplateServiceClient templateServiceClient;
   private final NotificationDispatcher notificationDispatcher;
 
+  private final String KEY_SEPARATOR = "::";
+
   @Async("virtualThreadExecutor")
   public void processNotification(NotificationPayload payload) {
     log.info("Gateway: Started processing notification request: {}", payload.requestId());
@@ -38,7 +41,10 @@ public class NotificationService {
       validateTemplate(payload.templateName());
 
       Map<String, RenderResult> resultMap = performBatchRendering(payload);
-      if (resultMap == null) return;
+      if (resultMap == null) {
+        log.error("Rendering templates failed.");
+        return;
+      }
 
       switch (payload.deliveryStrategy()) {
         case FALLBACK -> processWithFallback(payload, resultMap);
@@ -54,42 +60,80 @@ public class NotificationService {
 
   private void processInParallel(NotificationPayload payload, Map<String, RenderResult> resultMap) {
     log.info("Processing request {} with PARALLEL strategy", payload.requestId());
-    payload.recipients().forEach(recipient -> {
-      RenderResult result = resultMap.get(recipient.phone());
-      if (isRenderResultInvalid(result, recipient)) return;
 
-      if (payload.channels().contains(NotificationPayload.Channel.PUSH)) {
-        dispatchPushNotification(recipient, payload.channelConfig().push(), result.data());
+    payload.recipients().forEach(recipient -> {
+      if(payload.channels().contains(NotificationPayload.Channel.PUSH)) {
+        final String taskKey = recipient.phone() + KEY_SEPARATOR + NotificationPayload.Channel.PUSH.name();
+        RenderResult pushResult = resultMap.get(taskKey);
+
+        if(!isRenderResultInvalid(pushResult, recipient)) {
+
+          var pushConfig = Optional.ofNullable(payload.channelConfig())
+              .map(NotificationPayload.ChannelConfig::push)
+              .orElse(null);
+
+          dispatchPushNotification(recipient, pushConfig, pushResult.data());
+        }
       }
-      if (payload.channels().contains(NotificationPayload.Channel.SMS)) {
-        dispatchSmsNotification(recipient, payload.channelConfig().sms(), result.data().body());
+
+      if(payload.channels().contains(NotificationPayload.Channel.SMS)) {
+        final String taskKey = recipient.phone() + KEY_SEPARATOR + NotificationPayload.Channel.SMS.name();
+        RenderResult smsResult = resultMap.get(taskKey);
+
+        if (!isRenderResultInvalid(smsResult, recipient)) {
+          var smsConfig = Optional.ofNullable(payload.channelConfig())
+              .map(NotificationPayload.ChannelConfig::sms)
+              .orElse(null);
+
+          dispatchSmsNotification(recipient, smsConfig, smsResult.data().body());
+        }
       }
+
     });
+
   }
 
   private void processWithFallback(NotificationPayload payload, Map<String, RenderResult> resultMap) {
     log.info("Processing request {} with FALLBACK strategy", payload.requestId());
-    for (var recipient : payload.recipients()) {
-      RenderResult result = resultMap.get(recipient.phone());
-      if (isRenderResultInvalid(result, recipient)) continue;
 
+    for (var recipient : payload.recipients()) {
       boolean dispatched = false;
       for (var channel : payload.channels()) {
-        boolean success = false;
-        if (channel == NotificationPayload.Channel.PUSH) {
-          success = dispatchPushNotification(recipient, payload.channelConfig().push(), result.data());
-        } else if (channel == NotificationPayload.Channel.SMS) {
-          dispatchSmsNotification(recipient, payload.channelConfig().sms(), result.data().body());
-          success = true;
+        final String taskKey = recipient.phone() + KEY_SEPARATOR + channel.name();
+        RenderResult result = resultMap.get(taskKey);
+
+        if (isRenderResultInvalid(result, recipient)) {
+          log.warn("Render failed for recipient {} on channel {}, trying next fallback channel.", recipient.phone(), channel);
+          continue; // Move to the next channel.
         }
-        if (success) {
+
+        boolean dispatchSuccess = false;
+
+        if (channel == NotificationPayload.Channel.PUSH) {
+          var pushConfig = Optional.ofNullable(payload.channelConfig())
+              .map(NotificationPayload.ChannelConfig::push)
+              .orElse(null);
+
+          dispatchSuccess = dispatchPushNotification(recipient, pushConfig, result.data());
+        } else if (channel == NotificationPayload.Channel.SMS) {
+          var smsConfig = Optional.ofNullable(payload.channelConfig())
+              .map(NotificationPayload.ChannelConfig::sms)
+              .orElse(null);
+
+          dispatchSmsNotification(recipient, smsConfig, result.data().body());
+          dispatchSuccess = true;
+        }
+
+        if (dispatchSuccess) {
           log.info("Dispatched to {} via fallback channel {}", recipient.phone(), channel);
           dispatched = true;
-          break;
+          break; // Success! Stop trying other channels for this recipient.
         }
       }
+
       if (!dispatched) {
         log.error("All fallback channels failed for recipient {}", recipient.phone());
+        // TODO: emit info
       }
     }
   }
@@ -105,9 +149,14 @@ public class NotificationService {
   }
 
   private Map<String, RenderResult> performBatchRendering(NotificationPayload payload) {
-    List<BatchRenderRequest.RenderTask> renderTasks = payload.recipients().stream()
-        .flatMap(r -> payload.channels().stream()
-            .map(c -> new BatchRenderRequest.RenderTask(r.phone(), r.lang(), TemplateType.valueOf(c.name()), r.variables())))
+    var renderTasks = payload.recipients().stream()
+        .flatMap(r -> payload.channels().stream().map(c ->
+            new BatchRenderRequest.RenderTask(
+                r.phone() + KEY_SEPARATOR + c.name(),
+                r.lang(),
+                TemplateType.valueOf(c.name()),
+                r.variables()
+            )))
         .distinct()
         .toList();
 

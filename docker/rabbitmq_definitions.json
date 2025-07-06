@@ -1,0 +1,14 @@
+{
+  "vhosts": [
+    { "name": "notification" }
+  ],
+  "permissions": [
+    {
+      "user": "admin",
+      "vhost": "notification",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    }
+  ]
+}

@@ -9,7 +9,6 @@ import java.util.List;
  * and owns its microservice notification-registry-service
  */
 
-@Repository
 public interface PushTokenRepository {
   List<String> findTokensByPhone(String phone);
 }

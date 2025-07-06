@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  rabbitmq:
+    build: .
+    hostname: rabbitmq
+    environment:
+      - RABBITMQ_DEFAULT_USER=admin
+      - RABBITMQ_DEFAULT_PASS=admin
+      - RABBITMQ_LOAD_DEFINITIONS=/etc/rabbitmq/definitions.json
+    ports:
+      - "5672:5672" # AMQP port
+      - "15672:15672" # UI port
+      - "15692:15692" # Metrics port
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./rabbitmq_definitions.json:/etc/rabbitmq/definitions.json
+
+volumes:
+  rabbitmq_data:

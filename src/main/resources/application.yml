@@ -7,15 +7,23 @@ spring:
   rabbitmq:
     host: localhost
     port: 5672
-    username: guest
-    password: guest
+    username: admin
+    password: admin
     publisher-confirm-type: correlated
+    template:
+      mandatory: true
+    virtual-host: notification
 
 app:
   services:
     notification-template-service:
       url: http://localhost:8081
+      basic-auth:
+        username: admin
+        password: admin123
   rabbitmq:
+    exchanges:
+      direct: notification.exchange
     queues:
       sms: notification.sms.queue
       fcm: notification.fcm.queue
