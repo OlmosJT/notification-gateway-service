@@ -30,12 +30,14 @@ public class NotificationService {
   private final PushTokenRepository pushTokenRepository;
   private final TemplateServiceClient templateServiceClient;
   private final NotificationDispatcher notificationDispatcher;
+  private final EventPublisher eventPublisher;
 
   private final String KEY_SEPARATOR = "::";
 
   @Async("virtualThreadExecutor")
   public void processNotification(NotificationPayload payload) {
     log.info("Gateway: Started processing notification request: {}", payload.requestId());
+    eventPublisher.publishRequestAcceptedEvent(payload);
 
     try {
       validateTemplate(payload.templateName());
