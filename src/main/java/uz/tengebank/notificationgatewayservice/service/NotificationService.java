@@ -52,11 +52,11 @@ public class NotificationService {
         case FALLBACK -> processWithFallback(payload, resultMap);
         case PARALLEL -> processInParallel(payload, resultMap);
       }
-    } catch (FeignException.NotFound e) {
-//      handleBatchFailure(payload, "Template '" + payload.templateName() + "' not found.", e.contentUTF8());
+    } catch (FeignException e) {
+      eventPublisher.publishRequestFailedEvent(payload, e.getMessage(), e.contentUTF8());
     } catch (Exception e) {
       log.error("A critical error occurred while processing request {}: {}", payload.requestId(), e.getMessage(), e);
-//      handleBatchFailure(payload, "A critical internal error occurred.", null);
+      eventPublisher.publishRequestFailedEvent(payload, e.getMessage(), e.getCause().getMessage());
     }
   }
 
@@ -150,7 +150,7 @@ public class NotificationService {
     log.info("Template '{}' validated successfully.", templateName);
   }
 
-  private Map<String, RenderResult> performBatchRendering(NotificationPayload payload) {
+  private Map<String, RenderResult> performBatchRendering(NotificationPayload payload) throws ApiException {
     var renderTasks = payload.recipients().stream()
         .flatMap(r -> payload.channels().stream().map(c ->
             new BatchRenderRequest.RenderTask(
@@ -166,8 +166,7 @@ public class NotificationService {
     ApiResponse<List<RenderResult>> renderApiResponse = templateServiceClient.renderBatch(batchRequest);
 
     if (renderApiResponse.status() == ApiResponse.Status.ERROR) {
-//      handleBatchFailure(payload, "Batch rendering failed", renderApiResponse.error().toString());
-      return null;
+      throw new ApiException(CommonErrorCode.TEMPLATE_SERVICE_EXCEPTION, renderApiResponse.error().message());
     }
 
     return renderApiResponse.data().stream()

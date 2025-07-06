@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import uz.tengebank.notificationcontracts.events.EventEnvelope;
 import uz.tengebank.notificationcontracts.events.EventFactory;
 import uz.tengebank.notificationcontracts.events.EventType;
+import uz.tengebank.notificationcontracts.payload.NotificationProcessingFailed;
 import uz.tengebank.notificationcontracts.payload.NotificationRequestAccepted;
 import uz.tengebank.notificationcontracts.payload.Payload;
 import uz.tengebank.notificationgatewayservice.config.ApplicationProperties;
@@ -37,7 +38,7 @@ public class EventPublisher {
     this.rabbitTemplate = rabbitTemplate;
   }
 
-  public void publish(String eventType, Payload payload) {
+  private void publish(String eventType, Payload payload) {
     try {
       final String routingKey = "notification.event";
       final EventEnvelope envelope = EventFactory.create(payload, eventType, applicationName);
@@ -79,4 +80,18 @@ public class EventPublisher {
     publish(EventType.NOTIFICATION_REQUEST_ACCEPTED_V1, eventPayload);
   }
 
+  public void publishRequestFailedEvent(NotificationPayload payload, String reason, String details) {
+    var recipientPhones = payload.recipients().stream()
+        .map(NotificationPayload.Recipient::phone)
+        .toList();
+
+    var eventPayload = new NotificationProcessingFailed(
+        payload.requestId(),
+        reason,
+        details,
+        recipientPhones
+    );
+
+    publish(EventType.NOTIFICATION_PROCESSING_FAILED_V1, eventPayload);
+  }
 }
