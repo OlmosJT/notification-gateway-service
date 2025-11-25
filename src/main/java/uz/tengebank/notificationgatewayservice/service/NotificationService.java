@@ -15,6 +15,8 @@ import uz.tengebank.notificationgatewayservice.dto.template.batch.BatchRenderReq
 import uz.tengebank.notificationgatewayservice.dto.template.batch.RenderResult;
 import uz.tengebank.notificationgatewayservice.exception.ApiException;
 import uz.tengebank.notificationgatewayservice.repository.PushTokenRepository;
+import uz.tengebank.notificationgatewayservice.service.audit.EventPublisher;
+import uz.tengebank.notificationgatewayservice.service.dispatch.NotificationDispatcher;
 
 import java.util.Arrays;
 import java.util.List;
@@ -36,17 +38,18 @@ public class NotificationService {
   private final String KEY_SEPARATOR = "::";
 
   @Async("virtualThreadExecutor")
-  public void processNotification(NotificationRequest payload) {
-    log.info("Gateway: Started processing notification request: {}", payload.requestId());
-    eventPublisher.publishRequestAcceptedEvent(payload);
+  public void processNotification(NotificationRequest request) {
+    log.info("Gateway: Started processing notification request: {}", request.requestId());
+    eventPublisher.publishRequestAcceptedEvent(request);
 
     try {
-      validateTemplate(payload.templateName());
+      validateTemplate(request.templateCode());
 
-      Map<String, RenderResult> resultMap = performBatchRendering(payload);
+      Map<String, RenderResult> resultMap = performBatchRendering(request);
+
       if (resultMap == null) {
         log.error("Rendering templates failed.");
-        eventPublisher.publishRequestFailedEvent(payload, "RENDER_RESULT_NULL", "Batch render operation returned no data.");
+        eventPublisher.publishRequestFailedEvent(payload, "RENDER_RESULT_NULL", "Batch render operation returned null.");
         return;
       }
 
@@ -180,8 +183,8 @@ public class NotificationService {
     log.info("Template '{}' validated successfully.", templateName);
   }
 
-  private Map<String, RenderResult> performBatchRendering(NotificationPayload payload) throws ApiException {
-    var renderTasks = payload.recipients().stream()
+  private Map<String, RenderResult> performBatchRendering(NotificationRequest request) throws ApiException {
+    var renderTasks = request.destinations().stream()
         .flatMap(r -> payload.channels().stream().map(c ->
             new BatchRenderRequest.RenderTask(
                 r.id() + KEY_SEPARATOR + c.name(),
@@ -192,7 +195,7 @@ public class NotificationService {
         .distinct()
         .toList();
 
-    BatchRenderRequest batchRequest = new BatchRenderRequest(payload.templateName(), renderTasks);
+    BatchRenderRequest batchRequest = new BatchRenderRequest(request.templateCode(), renderTasks);
     ApiResponse<List<RenderResult>> renderApiResponse = templateServiceClient.renderBatch(batchRequest);
 
     if (renderApiResponse.status() == ApiResponse.Status.ERROR) {

@@ -1,4 +1,4 @@
-package uz.tengebank.notificationgatewayservice.service;
+package uz.tengebank.notificationgatewayservice.service.dispatch;
 
 import uz.tengebank.notificationgatewayservice.dto.notification.PushPayload;
 import uz.tengebank.notificationgatewayservice.dto.notification.SmsPayload;

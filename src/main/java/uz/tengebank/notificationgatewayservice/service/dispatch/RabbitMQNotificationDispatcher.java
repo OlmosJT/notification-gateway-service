@@ -1,4 +1,4 @@
-package uz.tengebank.notificationgatewayservice.service;
+package uz.tengebank.notificationgatewayservice.service.dispatch;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,7 +36,7 @@ public class RabbitMQNotificationDispatcher implements NotificationDispatcher {
 
     @Override
     public void dispatchPush(PushPayload message) {
-        final String exchangeName = props.rabbitmq().exchanges().direct();
+        final String exchangeName = props.rabbitmq().exchanges().internal();
         final String routingKey = "notification.fcm";
 
         log.info("Dispatching Push to exchange '{}' with routing key '{}' for target {}",
