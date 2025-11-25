@@ -16,7 +16,6 @@ public record BatchRenderRequest(
   public record RenderTask(
           @NotBlank String recipientId,
           @NotBlank String lang,
-          @NotNull TemplateType type,
           @NotEmpty Map<String, Object> variables
   ) {}
 }

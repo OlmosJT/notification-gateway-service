@@ -4,6 +4,7 @@ import feign.RequestInterceptor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import uz.tengebank.notificationgatewayservice.config.props.ApplicationProperties;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;

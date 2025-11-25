@@ -1,21 +1,21 @@
 package uz.tengebank.notificationgatewayservice.service;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import uz.tengebank.notificationcontracts.dto.NotificationRequest;
+import uz.tengebank.notificationcontracts.dto.enums.IndividualNotificationStatus;
+import uz.tengebank.notificationcontracts.dto.enums.NotificationRequestStatus;
 import uz.tengebank.notificationcontracts.events.EventEnvelope;
 import uz.tengebank.notificationcontracts.events.EventFactory;
 import uz.tengebank.notificationcontracts.events.EventType;
-import uz.tengebank.notificationcontracts.payload.NotificationAttemptFailed;
-import uz.tengebank.notificationcontracts.payload.NotificationProcessingFailed;
-import uz.tengebank.notificationcontracts.payload.NotificationRequestAccepted;
+import uz.tengebank.notificationcontracts.payload.NotificationDestinationPayload;
+import uz.tengebank.notificationcontracts.payload.NotificationRequestPayload;
 import uz.tengebank.notificationcontracts.payload.Payload;
-import uz.tengebank.notificationgatewayservice.config.ApplicationProperties;
-import uz.tengebank.notificationgatewayservice.dto.notification.NotificationPayload;
+import uz.tengebank.notificationgatewayservice.config.props.ApplicationProperties;
 
 import java.util.UUID;
 
@@ -23,87 +23,70 @@ import java.util.UUID;
 @Service
 public class EventPublisher {
 
-  private final String exchangeName;
-  private final String applicationName;
-  private final RabbitTemplate rabbitTemplate;
+    private final String auditExchangeName;
+    private final String applicationName;
+    private final RabbitTemplate rabbitTemplate;
 
-  public EventPublisher(
-      ApplicationProperties props,
-      @Value("${spring.application.name}")
-      String applicationName,
-      RabbitTemplate rabbitTemplate
-  ) {
-    this.exchangeName = props.rabbitmq().exchanges().direct();
-
-    this.applicationName = applicationName;
-    this.rabbitTemplate = rabbitTemplate;
-  }
-
-  private void publish(String eventType, Payload payload) {
-    try {
-      final String routingKey = "notification.event";
-      final EventEnvelope envelope = EventFactory.create(payload, eventType, applicationName);
-
-      log.info("Sending event to exchange '{}' with routing key '{}'. EventEnvelope: {}", exchangeName, routingKey, envelope);
-
-      CorrelationData correlationData = new CorrelationData(UUID.randomUUID().toString());
-      rabbitTemplate.convertAndSend(exchangeName, routingKey, envelope, correlationData);
-      log.info("Emit envelope sent with correlation ID: {}", correlationData.getId());
-
-    } catch (AmqpException e) {
-      log.error("Failed to publish event '{}'. Payload: {}", eventType, payload, e);
+    public EventPublisher(
+            ApplicationProperties props,
+            @Value("${spring.application.name}")
+            String applicationName,
+            RabbitTemplate rabbitTemplate
+    ) {
+        this.auditExchangeName = props.rabbitmq().exchanges().audit();
+        this.applicationName = applicationName;
+        this.rabbitTemplate = rabbitTemplate;
     }
-  }
 
-  public void publishRequestAcceptedEvent(NotificationPayload payload) {
-    var recipients = payload.recipients().stream()
-        .map(recipient -> new NotificationRequestAccepted.Recipient(
-            recipient.phone(),
-            recipient.lang(),
-            recipient.variables())
-        ).toList();
+    public void publishRequestAcceptedEvent(NotificationRequest request) {
+        var eventPayload = new NotificationRequestPayload(
+                request.requestId(),
+                NotificationRequestStatus.ACCEPTED,
+                "Request accepted by Gateway",
+                null,
+                request
+        );
 
-    var channelConfig = payload.channelConfig() != null
-        ? new NotificationRequestAccepted.ChannelConfig(payload.channelConfig().sms(), payload.channelConfig().push())
-        : null;
+        publish(EventType.NOTIFICATION_REQUEST_ACCEPTED_V1, eventPayload);
+    }
 
-    var eventPayload = new NotificationRequestAccepted(
-        payload.requestId(),
-        payload.source(),
-        payload.category(),
-        payload.templateName(),
-        payload.channels().stream().map(Enum::name).toList(),
-        payload.deliveryStrategy().name(),
-        channelConfig,
-        recipients
-    );
+    public void publishRequestFailedEvent(NotificationRequest request, String reason, String details) {
+        var eventPayload = new NotificationRequestPayload(
+                request.requestId(),
+                NotificationRequestStatus.FAILED,
+                reason,
+                details,
+                request
+        );
 
-    publish(EventType.NOTIFICATION_REQUEST_ACCEPTED_V1, eventPayload);
-  }
+        publish(EventType.NOTIFICATION_REQUEST_FAILED_V1, eventPayload);
+    }
 
-  public void publishRequestFailedEvent(NotificationPayload payload, String reason, String details) {
-    var recipientPhones = payload.recipients().stream()
-        .map(NotificationPayload.Recipient::phone)
-        .toList();
+    public void publishNotificationAttemptFailedEvent(NotificationRequest request, UUID destinationId, String errorCode, String errorMessage) {
+        var eventPayload = new NotificationDestinationPayload(
+                request.requestId(),
+                destinationId,
+                IndividualNotificationStatus.INTERNAL_FAILURE,
+                errorMessage,
+                errorCode
+        );
+        publish(EventType.INDIVIDUAL_NOTIFICATION_INTERNAL_FAILURE_V1, eventPayload);
+    }
 
-    var eventPayload = new NotificationProcessingFailed(
-        payload.requestId(),
-        reason,
-        details,
-        recipientPhones
-    );
+    private void publish(String eventType, Payload payload) {
+        try {
+            final String routingKey = "notification.event";
+            final EventEnvelope envelope = EventFactory.create(payload, eventType, applicationName);
 
-    publish(EventType.NOTIFICATION_PROCESSING_FAILED_V1, eventPayload);
-  }
+            CorrelationData correlationData = new CorrelationData(UUID.randomUUID().toString());
 
-  public void publishNotificationAttemptFailedEvent(NotificationPayload payload, UUID recipientId, String channel, String reason, String details) {
-    var eventPayload = new NotificationAttemptFailed(
-        payload.requestId(),
-        recipientId,
-        channel,
-        reason,
-        details
-    );
-    publish(EventType.NOTIFICATION_ATTEMPT_FAILED_V1, eventPayload);
-  }
+            log.info("Publishing event '{}' to exchange '{}' with CorrelationData '{}'", eventType, auditExchangeName, correlationData);
+
+            rabbitTemplate.convertAndSend(auditExchangeName, routingKey, envelope, correlationData);
+
+        } catch (AmqpException e) {
+            log.error("Failed to publish event '{}'. Payload: {}", eventType, payload, e);
+        }
+    }
+
 }

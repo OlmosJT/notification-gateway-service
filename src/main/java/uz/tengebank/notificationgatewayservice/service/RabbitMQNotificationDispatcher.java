@@ -5,7 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
-import uz.tengebank.notificationgatewayservice.config.ApplicationProperties;
+import uz.tengebank.notificationgatewayservice.config.props.ApplicationProperties;
 import uz.tengebank.notificationgatewayservice.dto.notification.PushPayload;
 import uz.tengebank.notificationgatewayservice.dto.notification.SmsPayload;
 
@@ -22,7 +22,7 @@ public class RabbitMQNotificationDispatcher implements NotificationDispatcher {
 
     @Override
     public void dispatchSms(SmsPayload message) {
-        final String exchangeName = props.rabbitmq().exchanges().direct();
+        final String exchangeName = props.rabbitmq().exchanges().internal();
         final String routingKey = "notification.sms";
 
         log.info("Dispatching SMS to exchange '{}' with routing key '{}' for target {}",

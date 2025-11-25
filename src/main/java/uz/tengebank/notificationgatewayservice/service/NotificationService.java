@@ -5,9 +5,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import uz.tengebank.notificationcontracts.dto.NotificationRequest;
 import uz.tengebank.notificationgatewayservice.constants.CommonErrorCode;
 import uz.tengebank.notificationgatewayservice.dto.ApiResponse;
-import uz.tengebank.notificationgatewayservice.dto.notification.NotificationPayload;
 import uz.tengebank.notificationgatewayservice.dto.notification.PushPayload;
 import uz.tengebank.notificationgatewayservice.dto.notification.SmsPayload;
 import uz.tengebank.notificationgatewayservice.dto.template.TemplateType;
@@ -36,7 +36,7 @@ public class NotificationService {
   private final String KEY_SEPARATOR = "::";
 
   @Async("virtualThreadExecutor")
-  public void processNotification(NotificationPayload payload) {
+  public void processNotification(NotificationRequest payload) {
     log.info("Gateway: Started processing notification request: {}", payload.requestId());
     eventPublisher.publishRequestAcceptedEvent(payload);
 

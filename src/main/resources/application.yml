@@ -9,9 +9,9 @@ spring:
     port: 5672
     username: admin
     password: admin
-    publisher-confirm-type: correlated
+    publisher-confirm-type: correlated # RabbitMQ cluster informs producer about published message
     template:
-      mandatory: true
+      mandatory: true # If message is NOT routable, rabbitMq calls callback: rabbitTemplate.setReturnsCallback(returned -> {...});
     virtual-host: notification
 
 app:
@@ -23,9 +23,9 @@ app:
         password: admin123
   rabbitmq:
     exchanges:
-      direct: notification.exchange
+      internal: notification.internal.exchange
+      audit: notification.audit.exchange
     queues:
       sms: notification.sms.queue
       fcm: notification.fcm.queue
       hcm: notification.hcm.queue
-      event: notification.events.queue

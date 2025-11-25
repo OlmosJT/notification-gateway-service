@@ -1,8 +1,7 @@
-package uz.tengebank.notificationgatewayservice.config;
+package uz.tengebank.notificationgatewayservice.config.props;
 
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 @ConfigurationProperties(prefix = "app")
 public record ApplicationProperties(
@@ -30,14 +29,14 @@ public record ApplicationProperties(
   }
 
   public record Exchanges(
-      @NotBlank String direct
+      @NotBlank String internal,
+      @NotBlank String audit
   ) {}
 
   public record Queues(
           @NotBlank String sms,
           @NotBlank String fcm,
-          @NotBlank String hcm,
-          @NotBlank String event
+          @NotBlank String hcm
   ) {}
 
 }

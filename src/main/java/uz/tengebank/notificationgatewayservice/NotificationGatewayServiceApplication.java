@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cloud.openfeign.EnableFeignClients;
 import org.springframework.scheduling.annotation.EnableAsync;
-import uz.tengebank.notificationgatewayservice.config.ApplicationProperties;
+import uz.tengebank.notificationgatewayservice.config.props.ApplicationProperties;
 
 
 @EnableAsync
